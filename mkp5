@@ -1,0 +1,7 @@
+#!/bin/bash
+# WARNING: This program can overwrite directories! Use caution!
+mkdir $1 # automatically errors if directory already exists
+cp -r $(dirname $(which mkp5))/.mkp5/* $1
+subl $1
+cd $1
+python -m SimpleHTTPServer
