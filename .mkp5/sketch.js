@@ -1,19 +1,19 @@
-var sketch = function (s) {
+var sketch = function (p) {
 
     // Preload assets using p5 *load functions.
-    s.preload = function () {
+    p.preload = function () {
     }
 
-    s.setup = function () {
-        s.createCanvas(s.windowWidth, s.windowHeight);
+    p.setup = function () {
+        p.createCanvas(p.windowWidth, p.windowHeight);
     }
 
-    s.draw = function () {
-        s.background(0);
+    p.draw = function () {
+        p.background(0);
     }
 
-    s.windowResized = function () {
-        s.resizeCanvas(s.windowWidth, s.windowHeight);
+    p.windowResized = function () {
+        p.resizeCanvas(p.windowWidth, p.windowHeight);
     }
 }
 

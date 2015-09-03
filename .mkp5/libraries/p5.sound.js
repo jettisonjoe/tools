@@ -1,4 +1,4 @@
-/*! p5.sound.js v0.2.12 2015-06-03 */
+/*! p5.sound.js v0.2.13 2015-07-17 */
 (function (root, factory) {
   if (typeof define === 'function' && define.amd)
     define('p5.sound', ['p5'], function (p5) { (factory(p5));});
@@ -483,59 +483,84 @@ panner = function () {
   var p5sound = master;
   var ac = p5sound.audiocontext;
   // Stereo panner
-  p5.Panner = function (input, output, numInputChannels) {
-    this.input = ac.createGain();
-    input.connect(this.input);
-    this.left = ac.createGain();
-    this.right = ac.createGain();
-    this.left.channelInterpretation = 'discrete';
-    this.right.channelInterpretation = 'discrete';
-    // if input is stereo
-    if (numInputChannels > 1) {
-      this.splitter = ac.createChannelSplitter(2);
-      this.input.connect(this.splitter);
-      this.splitter.connect(this.left, 1);
-      this.splitter.connect(this.right, 0);
-    } else {
-      this.input.connect(this.left);
-      this.input.connect(this.right);
-    }
-    this.output = ac.createChannelMerger(2);
-    this.left.connect(this.output, 0, 1);
-    this.right.connect(this.output, 0, 0);
-    this.output.connect(output);
-  };
-  // -1 is left, +1 is right
-  p5.Panner.prototype.pan = function (val, tFromNow) {
-    var time = tFromNow || 0;
-    var t = ac.currentTime + time;
-    var v = (val + 1) / 2;
-    var rightVal = Math.cos(v * Math.PI / 2);
-    var leftVal = Math.sin(v * Math.PI / 2);
-    this.left.gain.linearRampToValueAtTime(leftVal, t);
-    this.right.gain.linearRampToValueAtTime(rightVal, t);
-  };
-  p5.Panner.prototype.inputChannels = function (numChannels) {
-    if (numChannels === 1) {
-      this.input.disconnect();
-      this.input.connect(this.left);
-      this.input.connect(this.right);
-    } else if (numChannels === 2) {
-      if (typeof (this.splitter === 'undefined')) {
+  // if there is a stereo panner node use it
+  if (typeof ac.createStereoPanner !== 'undefined') {
+    p5.Panner = function (input, output, numInputChannels) {
+      this.stereoPanner = this.input = ac.createStereoPanner();
+      input.connect(this.stereoPanner);
+      this.stereoPanner.connect(output);
+    };
+    p5.Panner.prototype.pan = function (val, tFromNow) {
+      var time = tFromNow || 0;
+      var t = ac.currentTime + time;
+      this.stereoPanner.pan.linearRampToValueAtTime(val, t);
+    };
+    p5.Panner.prototype.inputChannels = function (numChannels) {
+    };
+    p5.Panner.prototype.connect = function (obj) {
+      this.stereoPanner.connect(obj);
+    };
+    p5.Panner.prototype.disconnect = function (obj) {
+      this.stereoPanner.disconnect();
+    };
+  } else {
+    // if there is no createStereoPanner object
+    // such as in safari 7.1.7 at the time of writing this
+    // use this method to create the effect
+    p5.Panner = function (input, output, numInputChannels) {
+      this.input = ac.createGain();
+      input.connect(this.input);
+      this.left = ac.createGain();
+      this.right = ac.createGain();
+      this.left.channelInterpretation = 'discrete';
+      this.right.channelInterpretation = 'discrete';
+      // if input is stereo
+      if (numInputChannels > 1) {
         this.splitter = ac.createChannelSplitter(2);
+        this.input.connect(this.splitter);
+        this.splitter.connect(this.left, 1);
+        this.splitter.connect(this.right, 0);
+      } else {
+        this.input.connect(this.left);
+        this.input.connect(this.right);
       }
-      this.input.disconnect();
-      this.input.connect(this.splitter);
-      this.splitter.connect(this.left, 1);
-      this.splitter.connect(this.right, 0);
-    }
-  };
-  p5.Panner.prototype.connect = function (obj) {
-    this.output.connect(obj);
-  };
-  p5.Panner.prototype.disconnect = function (obj) {
-    this.output.disconnect();
-  };
+      this.output = ac.createChannelMerger(2);
+      this.left.connect(this.output, 0, 1);
+      this.right.connect(this.output, 0, 0);
+      this.output.connect(output);
+    };
+    // -1 is left, +1 is right
+    p5.Panner.prototype.pan = function (val, tFromNow) {
+      var time = tFromNow || 0;
+      var t = ac.currentTime + time;
+      var v = (val + 1) / 2;
+      var rightVal = Math.cos(v * Math.PI / 2);
+      var leftVal = Math.sin(v * Math.PI / 2);
+      this.left.gain.linearRampToValueAtTime(leftVal, t);
+      this.right.gain.linearRampToValueAtTime(rightVal, t);
+    };
+    p5.Panner.prototype.inputChannels = function (numChannels) {
+      if (numChannels === 1) {
+        this.input.disconnect();
+        this.input.connect(this.left);
+        this.input.connect(this.right);
+      } else if (numChannels === 2) {
+        if (typeof (this.splitter === 'undefined')) {
+          this.splitter = ac.createChannelSplitter(2);
+        }
+        this.input.disconnect();
+        this.input.connect(this.splitter);
+        this.splitter.connect(this.left, 1);
+        this.splitter.connect(this.right, 0);
+      }
+    };
+    p5.Panner.prototype.connect = function (obj) {
+      this.output.connect(obj);
+    };
+    p5.Panner.prototype.disconnect = function (obj) {
+      this.output.disconnect();
+    };
+  }
   // 3D panner
   p5.Panner3D = function (input, output) {
     var panner3D = ac.createPanner();
@@ -656,7 +681,7 @@ soundfile = function () {
     }
   };
   // register preload handling of loadSound
-  p5.prototype.registerPreloadMethod('loadSound');
+  p5.prototype.registerPreloadMethod('loadSound', p5);
   /**
    *  loadSound() returns a new p5.SoundFile from a specified
    *  path. If called during preload(), the p5.SoundFile will be ready
@@ -2177,11 +2202,11 @@ fft = function () {
    *  audio frequencies</a> within a waveform.</p>
    *
    *  <p>Once instantiated, a p5.FFT object can return an array based on
-   *  two types of analyses: <br> • <code>FFT.waveform()</code> computes
+   *  two types of analyses: <br> â€¢ <code>FFT.waveform()</code> computes
    *  amplitude values along the time domain. The array indices correspond
    *  to samples across a brief moment in time. Each value represents
    *  amplitude of the waveform at that sample of time.<br>
-   *  • <code>FFT.analyze() </code> computes amplitude values along the
+   *  â€¢ <code>FFT.analyze() </code> computes amplitude values along the
    *  frequency domain. The array indices correspond to frequencies (i.e.
    *  pitches), from the lowest to the highest that humans can hear. Each
    *  value represents amplitude at that slice of the frequency spectrum.
@@ -4207,8 +4232,6 @@ pulse = function () {
     this.dcGain.gain.value = 1.7 * (0.5 - this.w);
     // disconnect osc2 and connect it to delay, which is connected to output
     this.osc2.disconnect();
-    this.osc2.output.gain.minValue = -10;
-    this.osc2.output.gain.maxValue = 10;
     this.osc2.panner.disconnect();
     this.osc2.amp(-1);
     // inverted amplitude
@@ -4557,7 +4580,7 @@ audioin = function () {
     // Some browsers let developer determine their input sources
     if (typeof window.MediaStreamTrack === 'undefined') {
       window.alert('This browser does not support MediaStreamTrack');
-    } else if (typeof window.MediaStreamTrack.getSources !== 'undefined') {
+    } else if (typeof window.MediaStreamTrack.getSources === 'function') {
       // Chrome supports getSources to list inputs. Dev picks default
       window.MediaStreamTrack.getSources(this._gotSources);
     } else {
@@ -4675,11 +4698,12 @@ audioin = function () {
    *  @private
    */
   p5.AudioIn.prototype._gotSources = function (sourceInfos) {
-    for (var i = 0; i !== sourceInfos.length; i++) {
+    for (var i = 0; i < sourceInfos.length; i++) {
       var sourceInfo = sourceInfos[i];
       if (sourceInfo.kind === 'audio') {
         // add the inputs to inputSources
-        p5sound.inputSources.push(sourceInfo);
+        //p5sound.inputSources.push(sourceInfo);
+        return sourceInfo;
       }
     }
   };
@@ -4702,22 +4726,64 @@ audioin = function () {
       this.output.gain.setValueAtTime(vol, p5sound.audiocontext.currentTime);
     }
   };
-  /**
-   *  Returns a list of available input sources. Some browsers
-   *  give the client the option to set their own media source.
-   *  Others allow JavaScript to determine which source,
-   *  and for this we have listSources() and setSource().<br/>
-   *
-   *  @method  listSources
-   *  @return {Array}
-   */
   p5.AudioIn.prototype.listSources = function () {
+    console.log('listSources is deprecated - please use AudioIn.getSources');
     console.log('input sources: ');
-    console.log(p5sound.inputSources);
     if (p5sound.inputSources.length > 0) {
       return p5sound.inputSources;
     } else {
       return 'This browser does not support MediaStreamTrack.getSources()';
+    }
+  };
+  /**
+   * Chrome only. Returns a list of available input sources
+   * and allows the user to set the media source. Firefox allows
+   * the user to choose from input sources in the permissions dialogue
+   * instead of enumerating available sources and selecting one.
+   * Note: in order to have descriptive media names your page must be
+   * served over a secure (HTTPS) connection and the page should
+   * request user media before enumerating devices. Otherwise device
+   * ID will be a long device ID number and does not specify device
+   * type. For example see
+   * https://simpl.info/getusermedia/sources/index.html vs.
+   * http://simpl.info/getusermedia/sources/index.html
+   *
+   * @method  getSources
+   * @param  {Function} callback a callback to handle the sources
+   *                               when they have been enumerated
+   * @example
+   *  <div><code>
+   *  var audiograb;
+   *
+   *  function setup(){
+   *    //new audioIn
+   *    audioGrab = new p5.AudioIn();
+   *
+   *    audioGrab.getSources(function(sourceList) {
+   *      //print out the array of available sources
+   *      console.log(sourceList);
+   *      //set the source to the first item in the inputSources array
+   *      audioGrab.setSource(0);
+   *    });
+   *  }
+   *  function draw(){
+   *  }
+   *  </code></div>
+   */
+  p5.AudioIn.prototype.getSources = function (callback) {
+    if (typeof window.MediaStreamTrack.getSources === 'function') {
+      window.MediaStreamTrack.getSources(function (data) {
+        for (var i = 0, max = data.length; i < max; i++) {
+          var sourceInfo = data[i];
+          if (sourceInfo.kind === 'audio') {
+            // add the inputs to inputSources
+            p5sound.inputSources.push(sourceInfo);
+          }
+        }
+        callback(p5sound.inputSources);
+      });
+    } else {
+      console.log('This browser does not support MediaStreamTrack.getSources()');
     }
   };
   /**
@@ -5942,7 +6008,7 @@ looper = function () {
    *
    *  <p>The first parameter is a name so that the phrase can be
    *  modified or deleted later. The callback is a a function that
-   *  this phrase will call at every step—for example it might be
+   *  this phrase will call at every stepâ€”for example it might be
    *  called <code>playNote(value){}</code>. The array determines
    *  which value is passed into the callback at each step of the
    *  phrase. It can be numbers, an object with multiple numbers,
@@ -6719,8 +6785,8 @@ peakdetect = function () {
    *  @param {Number} [freq2]     highFrequency - defaults to 20000 Hz
    *  @param {Number} [threshold] Threshold for detecting a beat between 0 and 1
    *                            scaled logarithmically where 0.1 is 1/2 the loudness
-   *                            of 1.0. Defaults to 0.25.
-   *  @param {Number} [framesPerPeak]     Defaults to 5.
+   *                            of 1.0. Defaults to 0.35.
+   *  @param {Number} [framesPerPeak]     Defaults to 20.
    *  @example
    *  <div><code>
    *
@@ -6774,13 +6840,18 @@ peakdetect = function () {
     var framesPerPeak;
     // framesPerPeak determines how often to look for a beat.
     // If a beat is provided, try to look for a beat based on bpm
-    this.framesPerPeak = _framesPerPeak || 5;
+    this.framesPerPeak = _framesPerPeak || 20;
     this.framesSinceLastPeak = 0;
     this.decayRate = 0.95;
-    this.threshold = threshold || 0.25;
+    this.threshold = threshold || 0.35;
     this.cutoff = 0;
+    // how much to increase the cutoff
+    // TO DO: document this / figure out how to make it accessible
+    this.cutoffMult = 1.5;
     this.energy = 0;
     this.penergy = 0;
+    // TO DO: document this property / figure out how to make it accessible
+    this.currentValue = 0;
     /**
      *  isDetected is set to true when a peak is detected.
      *
@@ -6812,7 +6883,7 @@ peakdetect = function () {
       this._onPeak();
       this.isDetected = true;
       // debounce
-      this.cutoff = nrg * 1.1;
+      this.cutoff = nrg * this.cutoffMult;
       this.framesSinceLastPeak = 0;
     } else {
       this.isDetected = false;
@@ -6823,13 +6894,15 @@ peakdetect = function () {
         this.cutoff = Math.max(this.cutoff, this.threshold);
       }
     }
+    this.currentValue = nrg;
     this.penergy = nrg;
   };
   /**
    *  onPeak accepts two arguments: a function to call when
-   *  a peak is detected, and optionally a value to pass
-   *  into that function.
+   *  a peak is detected. The value of the peak,
+   *  between 0.0 and 1.0, is passed to the callback.
    *
+   *  @method  onPeak
    *  @param  {Function} callback Name of a function that will
    *                              be called when a peak is
    *                              detected.
@@ -6839,20 +6912,49 @@ peakdetect = function () {
    *  @example
    *  <div><code>
    *  var cnv, soundFile, fft, peakDetect;
+   *  var ellipseWidth = 0;
    *
    *  function setup() {
    *    cnv = createCanvas(100,100);
+   *    textAlign(CENTER);
    *
-   *    cnv.mouseClicked = function() {
-   *      soundFile.play();
-   *    }
+   *    soundFile = loadSound('assets/beat.mp3');
+   *    fft = new p5.FFT();
+   *    peakDetect = new p5.PeakDetect();
    *
+   *    setupSound();
+   *
+   *    // when a beat is detected, call triggerBeat()
+   *    peakDetect.onPeak(triggerBeat);
    *  }
    *
    *  function draw() {
+   *    background(0);
+   *    fill(255);
+   *    text('click to play', width/2, height/2);
    *
+   *    fft.analyze();
+   *    peakDetect.update(fft);
+   *
+   *    ellipseWidth *= 0.95;
+   *    ellipse(width/2, height/2, ellipseWidth, ellipseWidth);
    *  }
    *
+   *  // this function is called by peakDetect.onPeak
+   *  function triggerBeat() {
+   *    ellipseWidth = 50;
+   *  }
+   *
+   *  // mouseclick starts/stops sound
+   *  function setupSound() {
+   *    cnv.mouseClicked( function() {
+   *      if (soundFile.isPlaying() ) {
+   *        soundFile.stop();
+   *      } else {
+   *        soundFile.play();
+   *      }
+   *    });
+   *  }
    *  </code></div>
    */
   p5.PeakDetect.prototype.onPeak = function (callback, val) {
@@ -6875,59 +6977,59 @@ gain = function () {
     *  @example
     *  <div><code>
    *
-   *    // load two soundfile and crossfade beetween them
-   *    var sound1,sound2;
-   *    var gain1, gain2, gain3;
+   *  // load two soundfile and crossfade beetween them
+   *  var sound1,sound2;
+   *  var gain1, gain2, gain3;
    *
-   *    function preload(){
-    *       soundFormats('ogg', 'mp3');
-    *       sound1 = loadSound('../_files/Damscray_-_Dancing_Tiger_01');
-    *       sound2 = loadSound('../_files/beat.mp3');
-   *    }
+   *  function preload(){
+    *   soundFormats('ogg', 'mp3');
+    *   sound1 = loadSound('../_files/Damscray_-_Dancing_Tiger_01');
+    *   sound2 = loadSound('../_files/beat.mp3');
+   *  }
    *
-   *    function setup() {
-    *       createCanvas(400,200);
+   *  function setup() {
+    *   createCanvas(400,200);
    *
-    *       // create a 'master' gain to which we will connect both soundfiles
-    *       gain3 = new p5.Gain();
-    *       gain3.connect();
+    *   // create a 'master' gain to which we will connect both soundfiles
+    *   gain3 = new p5.Gain();
+    *   gain3.connect();
    *
-    *       // setup first sound for playing
-    *       sound1.rate(1);
-    *       sound1.loop();
-    *       sound1.disconnect(); // diconnect from p5 output
+    *   // setup first sound for playing
+    *   sound1.rate(1);
+    *   sound1.loop();
+    *   sound1.disconnect(); // diconnect from p5 output
    *
-    *       gain1 = new p5.Gain(); // setup a gain node
-    *       gain1.setInput(sound1); // connect the first sound to its input
-    *       gain1.connect(gain3); // connect its output to the 'master'
+    *   gain1 = new p5.Gain(); // setup a gain node
+    *   gain1.setInput(sound1); // connect the first sound to its input
+    *   gain1.connect(gain3); // connect its output to the 'master'
    *
-    *       sound2.rate(1);
-    *       sound2.disconnect();
-    *       sound2.loop();
+    *   sound2.rate(1);
+    *   sound2.disconnect();
+    *   sound2.loop();
    *
-    *       gain2 = new p5.Gain();
-    *       gain2.setInput(sound2);
-    *       gain2.connect(gain3);
+    *   gain2 = new p5.Gain();
+    *   gain2.setInput(sound2);
+    *   gain2.connect(gain3);
    *
-   *    }
+   *  }
    *
-   *    function draw(){
-    *       background(180);
+   *  function draw(){
+    *   background(180);
    *
-    *       // calculate the horizontal distance beetween the mouse and the right of the screen
-    *       var d = dist(mouseX,0,width,0);
+    *   // calculate the horizontal distance beetween the mouse and the right of the screen
+    *   var d = dist(mouseX,0,width,0);
    *
-    *       // map the horizontal position of the mouse to values useable for volume control of sound1
-    *       var vol1 = map(mouseX,0,width,0,1);
-    *       var vol2 = 1-vol1; // when sound1 is loud, sound2 is quiet and vice versa
+    *   // map the horizontal position of the mouse to values useable for volume control of sound1
+    *   var vol1 = map(mouseX,0,width,0,1);
+    *   var vol2 = 1-vol1; // when sound1 is loud, sound2 is quiet and vice versa
    *
-    *       gain1.amp(vol1,0.5,0);
-    *       gain2.amp(vol2,0.5,0);
+    *   gain1.amp(vol1,0.5,0);
+    *   gain2.amp(vol2,0.5,0);
    *
-    *       // map the vertical position of the mouse to values useable for 'master volume control'
-    *       var vol3 = map(mouseY,0,height,0,1);
-    *       gain3.amp(vol3,0.5,0);
-    *   }
+    *   // map the vertical position of the mouse to values useable for 'master volume control'
+    *   var vol3 = map(mouseY,0,height,0,1);
+    *   gain3.amp(vol3,0.5,0);
+    * }
     *</code></div>
     *
     */
